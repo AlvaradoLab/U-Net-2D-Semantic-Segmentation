@@ -19,8 +19,8 @@
         "save_every": 5,
         "best_loss": 0.10042009502649307,
         "max_epochs": 100000,
-        "start_epoch": 691,
-        "load_from": "/home/hans/Haplochromis-Burtoni-Study/data/full/unet_0690_5_70827.pth"
+        "start_epoch": 701,
+        "load_from": "/home/hans/Haplochromis-Burtoni-Study/data/full/unet_0700_26_27728.pth"
     },
     "image": {
         "augmentations": [
