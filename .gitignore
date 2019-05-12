@@ -1,0 +1,10 @@
+cache/*
+data/*
+Machine learning training set/*
+*.pyc
+__pycache__/
+run.sh
+test_results/*
+*.jpg
+training.log
+train_config.json
