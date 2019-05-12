@@ -1,13 +1,15 @@
-from pprint import pprint
 import rawpy
 import imageio
+
 import glob
 import os
 import random
 import numpy as np
 from PIL import Image
+
+import torch
 from torch.utils.data import Dataset
-from scipy.misc import imread
+from torchvision import transforms
 
 import time
 random.seed(int(time.time()))
@@ -36,17 +38,28 @@ IMG_TYPES.extend([x.upper() for x in IMG_TYPES])
 class FishDataset(Dataset):
     
     # folders: List of dataset folders with subfolders for body parts with naming convention as above.
-    # type:
+    # dtype:
+    #       all: Return all possible classes together for a single forward op
     #       full: whole_body semantic segmentation
     #       indep: independent parts finetuned using whole_body model
     #       ventral_side: assumes model for ventral_side already exists
     #       dorsal_side: assumes model for dorsal_side already exists
     #       head: assumes segmentation model for head already exists
     #       body: ventral_side, dorsal_side and head segmentations
-    def __init__(self, folders, split='train', dtype='full', shuffle=False):
+    # split: train, test (test can be used for val)
+    # shuffle: randomly shuffle dataset
+    # transform: PIL Image transforms for image and annotation augmentation (rotate, flip etc.) [only augmentation transforms]
+    # target_transform: PIL Image transforms for image augmentation only (brightness, contrast etc.) [only augmentation transforms]
+    # name: Name identifying dataset to store cached RGB stats
+    def __init__(self, folders, split='train', dtype='full', img_size=None, transform=None, target_transform=None, name='fish'):
         
+        self.name = name
+        self.transform = transform
+        self.target_transform = target_transform
         self.split_ratio = 0.9 # train-val split
         
+        if dtype=='all':
+            self.dataset = INIT + INDEP + [y for x in HPARTS for y in x]
         if dtype=='full':
             self.dataset = INIT
         elif dtype=='indep':
@@ -58,7 +71,9 @@ class FishDataset(Dataset):
                 if dtype==HPARTS[i][0]:
                     self.dataset = HPARTS[i][1:]
         
-        self.shuffle = shuffle
+        self.dtype = dtype
+
+        self.img_size = img_size
         self.split = split
 
         # Dataset input images (x)
@@ -91,6 +106,8 @@ class FishDataset(Dataset):
                 del ann[k]
        
         self.ordered_keys = list(self.img_files.keys())
+        
+        self.mean, self.std = self.calculate_rough_image_stats()
 
     def get_image_files(self, path):
         
@@ -104,6 +121,34 @@ class FishDataset(Dataset):
 
         return img_dict
     
+    def calculate_rough_image_stats(self):
+           
+        if os.path.exists('cache/stats.txt'):   
+            with open('cache/stats.txt', 'r') as f:
+                mean, std = [np.array([np.float(y) for y in x.strip().split(' ')]) 
+                                for x in f.readlines()]
+            return mean, std
+
+        mean = np.zeros(3)
+        std = np.zeros(3)
+        for key in self.img_files:
+            img = np.array(self.get_image(self.img_files[key]))
+            mean += np.mean(np.mean(img, axis=0), axis=0)
+            std += np.std(np.std(img, axis=0), axis=0)
+            
+        nb_samples = len(self.img_files)
+        mean /= nb_samples
+        std /= nb_samples
+
+        if not os.path.isdir('cache'):
+            os.mkdir('cache')
+
+        with open('cache/stats.txt', 'w') as f:
+            f.write(' '.join(['%.5f'%(x) for x in mean])+'\n')
+            f.write(' '.join(['%.5f'%(x) for x in std]))
+ 
+        return mean, std
+
     def get_segmentation_mask(self, path):
         
         ANN = self.get_image(path)
@@ -115,6 +160,21 @@ class FishDataset(Dataset):
         #print (np.min(np.array(bw))) 
         
         return bw
+    
+    def one_hot_to_segmentation_map(self, ann, device=None):
+
+        fflag = False
+        seg = torch.zeros(ann.size()[-2:]).long()
+        
+        if device:
+            seg = seg.to(device)
+
+        for idx, a in enumerate(ann):
+            seg += a*(idx+1)
+            if torch.max(seg) > idx+1 and not fflag:
+                print ('Warning: segmentation map overlap detected!')
+                fflag = True
+        return seg
 
     def get_ann_files(self, path, imgs):
         
@@ -148,29 +208,59 @@ class FishDataset(Dataset):
 
     def __getitem__(self, index):
         
-        if self.shuffle:
-            key = random.choice(self.ordered_keys)
-        else:
-            key = self.ordered_keys[index]
-        
+        #key = random.choice(self.ordered_keys)
+        key = self.ordered_keys[index]
         image = self.get_image(self.img_files[key])
-
+        
         # List of PIL Image objects
         anns = []
         for ann in self.ann_files:
             ann_img = self.get_image(ann[key])
-            
-            segmask = self.get_segmentation_mask(annfile[0]) 
+            segmask = self.get_segmentation_mask(ann[key]) 
             anns.append(segmask)
             
             #img2 = Image.fromarray(ANN)
             #img2.save('sample.jpg')
         
-        return image, anns
+        random.seed(int(time.time()))
+        if self.transform:
+            image = self.transform(image)
+        
+        resize_transform = transforms.Resize(self.img_size)
+        transform = transforms.Compose([transforms.ToTensor(),
+                                        transforms.Normalize(self.mean, self.std)])
+        image = resize_transform(image)
 
-        #if self.split != 'test':
-        #    pass            
-            
+        #image.save('sample_image_%s.jpg'%(str(index).zfill(2)))
+        
+        image = transform(image)
+
+        random.seed(int(time.time()))
+        if self.target_transform:
+            for idx, ann in enumerate(anns):
+                anns[idx] = self.target_transform(ann)
+
+        annvec = None
+        for idx, ann in enumerate(anns):
+            #ann.save('sample_ann_%s_%s.jpg'%(str(index).zfill(2), str(idx).zfill(2)))
+
+            if len(self.dataset) == 1:
+                ann_slice = transforms.ToTensor()(resize_transform(ann)).float()
+            else:
+                ann_slice = transforms.ToTensor()(resize_transform(ann)).long()
+            ann_slice = ann_slice.squeeze(1)
+            if annvec is None:
+                annvec = ann_slice
+            else:
+                annvec = torch.cat((annvec, ann_slice))
+        
+        if len(anns) == 1:
+            return image, annvec
+        else:
+            return image, self.one_hot_to_segmentation_map(annvec)
+    
+    def get_classes(self):
+        return self.dataset
 
 if __name__=='__main__':
     
