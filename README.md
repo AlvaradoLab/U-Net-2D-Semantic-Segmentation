@@ -4,7 +4,7 @@ Install necessary libraries.
 
 ```pip install -r requirements.txt```
 
-Look into `train_config2.json` as it acts as the configuration file for the project. 
+Look into `train_config2.json` as it acts as the template for the configuration file of the project. 
 
 To run the training, use:
 
