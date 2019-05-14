@@ -35,6 +35,12 @@ INDEP = ['humeral_blotch', 'pelvic_fin', 'caudal_fin']
 IMG_TYPES = ['jpg', 'png', 'arw']
 IMG_TYPES.extend([x.upper() for x in IMG_TYPES])
 
+JOINT_TRANSFORMS = ['CenterCrop', 'FiveCrop', 'Pad', 'RandomAffine', 'RandomCrop', 'RandomHorizontalFlip', 
+                    'RandomVerticalFlip', 'RandomResizedCrop', 'RandomRotation', 'Resize', 'TenCrop']
+
+IMG_TRANSFORMS = ['ColorJitter', 'Grayscale', 'RandomGrayscale']
+IMG_FTRANSFORMS = ['adjust_gamma']
+
 class FishDataset(Dataset):
     
     # folders: List of dataset folders with subfolders for body parts with naming convention as above.
@@ -261,6 +267,9 @@ class FishDataset(Dataset):
     
     def get_classes(self):
         return self.dataset
+        
+    def apply_transforms(self, img, seg):
+       pass
 
 if __name__=='__main__':
     

@@ -84,7 +84,7 @@ def validate(config, loader, epoch, device):
     
     return running_loss/float(ctx)
 
-def test(config, data, device):
+def test(config, data, device, object_threshold=0.8):
     
     config.net_class.eval()
     
@@ -103,8 +103,8 @@ def test(config, data, device):
             
             #print ('M', torch.max(out), torch.min(out), torch.std(out.float()))
             
-            out[out<0.5] = 0
-            out[out>0.5] = 1
+            out[out<object_threshold] = 0
+            out[out>object_threshold] = 1
             
             #fg = out.squeeze(0)[1].unsqueeze(0).long()
             #print ('M', torch.max(labels), torch.min(labels))

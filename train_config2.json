@@ -1,21 +1,26 @@
 {
     "segmentation_mask": {
-        "type": "full",
+        "parent": "",
         "hierarchy": "false",
-        "parent": ""
+        "type": "full"
     },
-    "dataset_folders": [
-        "/home/hans/Haplochromis-Burtoni-Study/Machine learning training set/Light-Dark/T0",
-        "/home/hans/Haplochromis-Burtoni-Study/Machine learning training set/Light-Dark/T1",
-        "/home/hans/Haplochromis-Burtoni-Study/Machine learning training set/photos 1.30.2019"
-    ],
+    "training": {
+        "decay_type": "loss_plateau",
+        "lr_decay": 0.9,
+        "lr": 0.001,
+        "batch_size": 4,
+        "decay_wait": 10,
+        "optimizer": "adam",
+        "loss": "cross_entropy",
+        "model": "unet"
+    },
     "logs": {
         "best_epoch": 265,
         "save_every": 5,
         "best_loss": 0.10042009502649307,
         "max_epochs": 100000,
-        "start_epoch": 706,
-        "load_from": "/home/hans/Haplochromis-Burtoni-Study/data/full/unet_0705_0_23630.pth"
+        "start_epoch": 911,
+        "load_from": "/home/hans/Haplochromis-Burtoni-Study/data/full/unet_0910_1_96057.pth"
     },
     "image": {
         "augmentations": [
@@ -63,20 +68,22 @@
                 "args": {
                     "degrees": 180
                 }
+            },
+            {
+                "name": "functional/adjust_gamma",
+                "args": {
+                    "gamma": [0.4, 1.6]
+                },
+                "ranges": ["gamma"]
             }
         ],
         "width": 1024,
         "height": 1024,
         "augmentation_flag": "true"
     },
-    "training": {
-        "decay_type": "loss_plateau",
-        "lr_decay": 0.9,
-        "lr": 0.001,
-        "batch_size": 4,
-        "decay_wait": 10,
-        "optimizer": "adam",
-        "loss": "cross_entropy",
-        "model": "unet"
-    }
+    "dataset_folders": [
+        "/home/hans/Haplochromis-Burtoni-Study/Machine learning training set/Light-Dark/T0",
+        "/home/hans/Haplochromis-Burtoni-Study/Machine learning training set/Light-Dark/T1",
+        "/home/hans/Haplochromis-Burtoni-Study/Machine learning training set/photos 1.30.2019"
+    ]
 }
