@@ -1,3 +1,4 @@
+import numpy as np
 import os
 import torch
 import json
@@ -5,6 +6,7 @@ from torchvision import transforms
 from model import UNet
 from torch.optim import Adam, SGD, lr_scheduler
 from torch.nn import CrossEntropyLoss, BCELoss
+from dataset import JOINT_TRANSFORMS, IMG_TRANSFORMS
 
 class Config:
     def __init__(self, config_path):
@@ -18,8 +20,11 @@ class Config:
         self.aug = obj['image']['augmentations']
         self.model = obj['training']['model']
 
-        self.transform = self.compose_transforms(obj['image']['augmentations'])
-        
+        self.joint_transforms, self.img_transforms, self.fimg_transforms = self.compose_transforms(obj['image']['augmentations'])
+        print (self.joint_transforms) 
+        print (self.img_transforms)
+        print (self.fimg_transforms)
+
         self.lr = obj['training']['lr']
         self.lr_decay = obj['training']['lr']
         
@@ -30,17 +35,49 @@ class Config:
         
         self.training_params = obj['training']
 
+    def get_random_functional(self, img, aug):
+        
+        if 'ranges' in aug:
+            args = {}
+            for key in aug['args']:
+                if key in aug['ranges']:
+                    l, h = aug['args'][key]
+                    assert l < h
+                    rn = l + np.random.rand() * (h - l)
+                    args[key] = rn
+                else:
+                    args[key] = aug['args'][key]  
+            
+            L = getattr(transforms.functional, aug['name'].split('/')[-1])(img, **args)
+        else:
+            L = getattr(transforms.functional, aug['name'].split('/')[-1])(img)
+        
+        return L(img)
+
     def compose_transforms(self, aug_list):
         
-        tr = []
+        tr_joint, tr_img, tr_fimg = [], [], []
+        
         for aug in aug_list:
+            if 'functional' in aug['name']:
+                tr_fimg.append(transforms.Lambda(lambda img: self.get_random_functional(img, aug)))
+                continue
+            if 'local' in aug['name']:
+                tr_img.append(transforms.Lambda(lambda img: self.get_random_functional(img, aug)))                
+            
             if 'args' in aug:
-                tr.append(getattr(transforms, aug['name'])(**aug['args']))
+                if aug['name'] in IMG_TRANSFORMS:
+                    tr_img.append(getattr(transforms, aug['name'])(**aug['args']))
+                elif aug['name'] in JOINT_TRANSFORMS:
+                    tr_joint.append(getattr(transforms, aug['name'])(**aug['args']))
             else:
-                tr.append(getattr(transforms, aug['name']))
+                if aug['name'] in IMG_TRANSFORMS:
+                    tr_img.append(getattr(transforms, aug['name']))
+                elif aug['name'] in JOINT_TRANSFORMS:
+                    tr_joint.append(getattr(transforms, aug['name']))
 
-        return transforms.RandomChoice(tr)
-    
+        return tr_joint, tr_img, tr_fimg
+
     def store_train_config(self, train_config, num_classes):
         
         self.net_class = self.get_model(self.model, num_classes)
@@ -76,7 +113,7 @@ class Config:
                 self.lr_scheduler = lr_scheduler.ReduceLROnPlateau(self.optim, verbose=True, patience=self.decay_wait)
         
         return self.optim
-    
+     
     def save_model(self, path, loss, epoch, module=False):
         
         if not module:

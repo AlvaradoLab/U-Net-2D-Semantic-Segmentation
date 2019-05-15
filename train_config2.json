@@ -52,6 +52,28 @@
                 }
             },
             {
+                "name": "local/GaussianBlur",
+                "args": {
+                    "std": [1.1, 3]
+                },
+                "ranges": ["std"]
+            },
+            {
+                "name": "local/PoissonAdditiveNoise",
+                "args": {
+                    "peak": [0.1, 0.9],
+                    "percent": [0.1, 1] 
+                },
+                "ranges": ["peak", "percent"]
+            },
+            {
+                "name": "local/SaltandPepperAdditiveNoise",
+                "args": {
+                   "percent": [0.01, 0.7] 
+                },
+                "ranges": ["percent"]
+            },
+            {
                 "name": "Resize",
                 "args": {
                     "size": 64
