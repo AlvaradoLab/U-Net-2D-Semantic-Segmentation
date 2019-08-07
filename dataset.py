@@ -14,6 +14,7 @@ from torchvision import transforms
 import time
 random.seed(int(time.time()))
 
+import local_transforms
 '''
 HIERARCHY:
 Ventral side -> pectoral anal fin
@@ -57,7 +58,7 @@ class FishDataset(Dataset):
     # transform: PIL Image transforms for image and annotation augmentation (rotate, flip etc.) [only augmentation transforms]
     # target_transform: PIL Image transforms for image augmentation only (brightness, contrast etc.) [only augmentation transforms]
     # name: Name identifying dataset to store cached RGB stats
-    def __init__(self, folders, split='train', dtype='full', img_size=None, transform=None, target_transform=None, name='fish'):
+    def __init__(self, folders, split='train', dtype='full', img_size=(1024,1024), transform=None, target_transform=None, name='fish'):
         
         self.name = name
         self.transform = transform
@@ -220,24 +221,35 @@ class FishDataset(Dataset):
         
         # List of PIL Image objects
         anns = []
-        for ann in self.ann_files:
-            ann_img = self.get_image(ann[key])
+        for idx, ann in enumerate(self.ann_files):
             segmask = self.get_segmentation_mask(ann[key]) 
             anns.append(segmask)
-            
-            #img2 = Image.fromarray(ANN)
-            #img2.save('sample.jpg')
         
         random.seed(int(time.time()))
-        if self.transform:
-            image = self.transform(image)
+        if self.transform is not None and np.random.rand() > 0.3:
+            idx, rn = random.choice(list(enumerate(self.transform)))
+            transform = local_transforms.EnhancedCompose([
+                                            local_transforms.Split(),
+                                            rn,
+                                            local_transforms.Merge()])
+            grp = [image] + anns
+            trans = transform(grp)
+            image = trans[0]
+            anns = trans[1:]
+
+        if self.target_transform is not None and np.random.rand() > 0.3:
+            idx, rn = random.choice(list(enumerate(self.transform)))
+            image = rn(image)
         
         resize_transform = transforms.Resize(self.img_size)
+        
+        print ("MEAN: ", self.mean, "; STD:", self.std)
         transform = transforms.Compose([transforms.ToTensor(),
                                         transforms.Normalize(self.mean, self.std)])
         image = resize_transform(image)
 
         #image.save('sample_image_%s.jpg'%(str(index).zfill(2)))
+        #[segmask.save('sample_ann_%s_%d.jpg'%(str(index).zfill(2), idx)) for idx, segmask in enumerate(anns)]
         
         image = transform(image)
 
@@ -274,14 +286,17 @@ class FishDataset(Dataset):
 if __name__=='__main__':
     
     types = ['full', 'body', 'indep', 'ventral_side', 'dorsal_side', 'head']
+    
+    types = types[0]
 
     for t in types:
-        print (t)
         f = FishDataset(['/home/hans/Haplochromis-Burtoni-Study/Machine learning training set/Light-Dark/T0', 
                          '/home/hans/Haplochromis-Burtoni-Study/Machine learning training set/Light-Dark/T1',
                          '/home/hans/Haplochromis-Burtoni-Study/Machine learning training set/photos 1.30.2019'], 
                          split='test', dtype=t)
         
+        for idx in range(len(f)):
+            f.__getitem__(idx)
         
     '''
     FishDataset('x', 'body')

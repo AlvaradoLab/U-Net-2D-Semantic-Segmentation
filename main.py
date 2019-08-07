@@ -1,6 +1,7 @@
 import os
 from model import UNet
 from dataset import FishDataset
+from test_dataset import TestDataset
 from config import Config
 import torch
 from torch import nn
@@ -10,9 +11,10 @@ import json
 from scipy.misc import imsave
 from torch.nn.functional import binary_cross_entropy, cross_entropy, softmax
 from torchvision import transforms
-
+import glob
 import logging
 import sys
+from PIL import Image
 logging.basicConfig(filename="training.log", filemode='a', level=logging.INFO, 
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
                                           
@@ -23,6 +25,7 @@ handler.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
 logger.addHandler(handler)
+
 
 def train(config, dataloader, epoch, device, optimizer):
     
@@ -84,7 +87,7 @@ def validate(config, loader, epoch, device):
     
     return running_loss/float(ctx)
 
-def test(config, data, device, object_threshold=0.8):
+def test(config, data, device, img_folder=None, object_threshold=0.8):
     
     config.net_class.eval()
     
@@ -103,7 +106,7 @@ def test(config, data, device, object_threshold=0.8):
             
             #print ('M', torch.max(out), torch.min(out), torch.std(out.float()))
             
-            out[out<object_threshold] = 0
+            out[out<=object_threshold] = 0
             out[out>object_threshold] = 1
             
             #fg = out.squeeze(0)[1].unsqueeze(0).long()
@@ -113,12 +116,15 @@ def test(config, data, device, object_threshold=0.8):
             imsave('test_results/%s_ann.png'%(str(idx).zfill(4)), (out.view(out.size()[2:]).cpu().numpy()*255).astype(np.uint8))
             imsave('test_results/%s_img.png'%(str(idx).zfill(4)), (img.squeeze(0).permute(1,2,0).cpu().numpy()*255).astype(np.uint8))
 
+
 if __name__=='__main__':
     
     import argparse
     ap = argparse.ArgumentParser()
     ap.add_argument('--test', action='store_true', help='Flag to test model')
     ap.add_argument('--model', help='Path of stored model')
+    ap.add_argument('--img_folder', help='Path of directory of test images to run inference using trained model')
+    ap.add_argument('--obj_threshold', help='Optional threshold for segmentation testing', default=0.8, type=float)
     args = ap.parse_args()
 
     if args.test and args.model is None:
@@ -138,8 +144,13 @@ if __name__=='__main__':
     valdataloader = DataLoader(valdataset, batch_size=32,
                         shuffle=False, num_workers=8)
     
-    testdataloader = DataLoader(valdataset, batch_size=1,
-                        shuffle=False, num_workers=1)
+    if args.img_folder is not None:
+        tdataset = TestDataset(args.img_folder)
+        testdataloader = DataLoader(tdataset, batch_size=1,
+                                    shuffle=False, num_workers=1)
+    else:
+        testdataloader = DataLoader(valdataset, batch_size=1,
+                                    shuffle=False, num_workers=1)
 
     N = len(dataset.get_classes())
     
@@ -186,7 +197,7 @@ if __name__=='__main__':
     optimizer = config.get_optimizer(config.net_class.parameters())
     
     if args.test:
-        test(config, testdataloader, device)
+        test(config, testdataloader, device, args.img_folder, args.obj_threshold)
         exit()
 
     for epoch in range(config.log['start_epoch'], config.log['max_epochs']+1): 

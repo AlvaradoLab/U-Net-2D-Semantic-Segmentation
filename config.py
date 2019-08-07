@@ -7,6 +7,7 @@ from model import UNet
 from torch.optim import Adam, SGD, lr_scheduler
 from torch.nn import CrossEntropyLoss, BCELoss
 from dataset import JOINT_TRANSFORMS, IMG_TRANSFORMS
+import local_transforms
 
 class Config:
     def __init__(self, config_path):
@@ -21,9 +22,6 @@ class Config:
         self.model = obj['training']['model']
 
         self.joint_transforms, self.img_transforms, self.fimg_transforms = self.compose_transforms(obj['image']['augmentations'])
-        print (self.joint_transforms) 
-        print (self.img_transforms)
-        print (self.fimg_transforms)
 
         self.lr = obj['training']['lr']
         self.lr_decay = obj['training']['lr']
@@ -35,8 +33,13 @@ class Config:
         
         self.training_params = obj['training']
 
-    def get_random_functional(self, img, aug):
+    def get_random_functional(self, img, aug, local=False):
         
+        if local:
+            F = local_transforms
+        else:
+            F = transforms.functional
+
         if 'ranges' in aug:
             args = {}
             for key in aug['args']:
@@ -48,9 +51,9 @@ class Config:
                 else:
                     args[key] = aug['args'][key]  
             
-            L = getattr(transforms.functional, aug['name'].split('/')[-1])(img, **args)
+            L = getattr(F, aug['name'].split('/')[-1])(img, **args)
         else:
-            L = getattr(transforms.functional, aug['name'].split('/')[-1])(img)
+            L = getattr(F, aug['name'].split('/')[-1])(img)
         
         return L(img)
 
@@ -63,7 +66,7 @@ class Config:
                 tr_fimg.append(transforms.Lambda(lambda img: self.get_random_functional(img, aug)))
                 continue
             if 'local' in aug['name']:
-                tr_img.append(transforms.Lambda(lambda img: self.get_random_functional(img, aug)))                
+                tr_fimg.append(transforms.Lambda(lambda img: self.get_random_functional(img, aug, local=True)))                
             
             if 'args' in aug:
                 if aug['name'] in IMG_TRANSFORMS:
