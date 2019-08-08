@@ -125,12 +125,14 @@ if __name__=='__main__':
     ap.add_argument('--model', help='Path of stored model')
     ap.add_argument('--img_folder', help='Path of directory of test images to run inference using trained model')
     ap.add_argument('--obj_threshold', help='Optional threshold for segmentation testing', default=0.8, type=float)
+    ap.add_argument('--config_file', help='Path to training config file', default='train_config2.json')
+    ap.add_argument('--logdir', help='Path to save model weights', default='data/')
     args = ap.parse_args()
 
     if args.test and args.model is None:
         ap.error("--test requires --model to be specified")
     
-    config = Config('train_config2.json')
+    config = Config(args.config_file)
 
     dataset = FishDataset(config.dataset_folders, img_size=config.img_size, 
                     split='train', dtype=config.ann_settings['type'])
@@ -162,7 +164,7 @@ if __name__=='__main__':
     module = False
     if torch.cuda.device_count() > 1 and not args.test:
         logger.info('Using multiple GPUs')
-        config.net_class = nn.DataParallel(config.net_class) 
+        config.net_class = nn.DataParallel(config.net_class, device_ids=list(range(torch.cuda.device_count()))) 
         module = True
     elif torch.cuda.device_count() == 1:
         logger.info('Using 1 GPU')
@@ -170,12 +172,12 @@ if __name__=='__main__':
     best_loss = 1000
     
     try:
-        os.mkdir('data')
+        os.mkdir(args.logdir)
     except Exception:
         pass
     
     try:
-        os.mkdir('data/%s'%(config.dtype))
+        os.mkdir(os.path.join(args.logdir, '%s'%(config.dtype)))
     except Exception:
         pass
     
@@ -216,6 +218,8 @@ if __name__=='__main__':
                     logger.info('Lowering LR from %.8f to %.8f!'%(prev_lr, cur_lr))
 
         if epoch % config.log['save_every'] == 0:
-            savepath = 'data/%s/%s_%s_%s.pth'%(config.dtype, config.model, str(epoch).zfill(4), str("%.5f"%(val_loss)).replace('.', '_'))
+            savepath = os.path.join(args.logdir, 
+                            '%s/%s_%s_%s.pth'%(config.dtype, config.model, str(epoch).zfill(4), str("%.5f"%(val_loss)).replace('.', '_')))
+
             logger.info('Saving model to %s'%(savepath))
             config.save_model(savepath, val_loss, epoch, module)

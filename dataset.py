@@ -13,6 +13,7 @@ from torchvision import transforms
 
 import time
 random.seed(int(time.time()))
+import cv2
 
 import local_transforms
 '''
@@ -110,7 +111,8 @@ class FishDataset(Dataset):
             del self.img_files[k]
 
             for ann in self.ann_files:
-                del ann[k]
+                if k in ann:
+                    del ann[k]
        
         self.ordered_keys = list(self.img_files.keys())
         
@@ -209,7 +211,10 @@ class FishDataset(Dataset):
             img = raw.postprocess()
             img = Image.fromarray(img)
         else:
-            img = Image.open(path)
+            img = cv2.imread(path)
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+            img = Image.fromarray(img)
 
         return img
 
@@ -243,7 +248,6 @@ class FishDataset(Dataset):
         
         resize_transform = transforms.Resize(self.img_size)
         
-        print ("MEAN: ", self.mean, "; STD:", self.std)
         transform = transforms.Compose([transforms.ToTensor(),
                                         transforms.Normalize(self.mean, self.std)])
         image = resize_transform(image)
